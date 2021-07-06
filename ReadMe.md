@@ -1,1 +1,1 @@
-# Hybrid-Representation-Learning-Approach-for-Rare-Disease-Classification
+# Hybrid Representation Learning Approach for Rare Disease Classification
