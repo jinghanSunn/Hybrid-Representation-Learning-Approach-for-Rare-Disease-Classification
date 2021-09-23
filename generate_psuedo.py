@@ -117,9 +117,6 @@ for data in test_loader:
         features.extend(feature.numpy())
         labels.extend(y_spt.numpy())
 
-        correct = (torch.eq(torch.Tensor(pred_q), y_qry.squeeze()).sum().item())/pred_q.shape[0]
-        print("pretrain acc:", correct)
-
 
 print("Generate psuedo label")
 UnlabelledDataset = ISICUnlabelDataset(traindir)
