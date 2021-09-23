@@ -33,7 +33,7 @@ Path flags:
 MoCo flags:
 - `--moco-k`: number of negatives to contrast for each positive. Default: 1280
 
-**(b)—(c) Genrate pseudo labels**
+**(b)—(c) Generate pseudo labels**
 
 
 ```
