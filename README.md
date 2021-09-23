@@ -1,5 +1,8 @@
 # Hybrid Representation Learning Approach for Rare Disease Classification
 This repo contains the reference source code for the paper **Unsupervised Representation Learning Meets Pseudo-Label Supervised Self-Distillation: A New Approach to Rare Disease Classification** in MICCAI2021. In this project, we provide a hybrid representation learning approach for rare disease classification. Our implementation is based on [Pytorch](https://pytorch.org/).
+<div align="center">
+	<img src="./overview.png" alt="Editor" width="600">
+</div>
 
 This repository was built off of [MoCo: Momentum Contrast for Unsupervised Visual Representation Learning](https://github.com/facebookresearch/moco).
 
