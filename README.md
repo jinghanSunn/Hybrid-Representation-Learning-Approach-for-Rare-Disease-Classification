@@ -67,6 +67,7 @@ Path flags:
 - `data_folder`: specify the data folder.
 - `--model_path`: specify the path to save model.
 - `--savedir`: specify the path of pseudo labels.
+
 MoCo flags:
 - `--moco-k`: number of negatives to contrast for each positive. Default: 1280
 
