@@ -1,4 +1,3 @@
-# 2020.1.14 add line 21 transforms.Resize((224, 224))
 import os
 
 import torch
