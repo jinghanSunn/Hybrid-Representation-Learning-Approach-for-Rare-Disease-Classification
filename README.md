@@ -1,5 +1,5 @@
 # Hybrid Representation Learning Approach for Rare Disease Classification
-This repo contains the reference source code for the paper **Unsupervised Representation Learning Meets Pseudo-Label Supervised Self-Distillation: A New Approach to Rare Disease Classification** in MICCAI2021. In this project, we provide a hybrid representation learning approach for rare disease classification. Our implementation is based on [Pytorch](https://pytorch.org/).
+This repo contains the reference source code for the paper [**Unsupervised Representation Learning Meets Pseudo-Label Supervised Self-Distillation: A New Approach to Rare Disease Classification**](https://link.springer.com/chapter/10.1007%2F978-3-030-87240-3_50) in MICCAI2021. In this project, we provide a hybrid representation learning approach for rare disease classification. Our implementation is based on [Pytorch](https://pytorch.org/).
 <div align="center">
 	<img src="./overview.png" alt="Editor" width="600">
 </div>
@@ -93,7 +93,14 @@ Path flags:
 ## Citation
 Please cite our paper if the code is helpful to your research.
 ```
-
+@inproceedings{sun2021unsupervised,
+  title={Unsupervised Representation Learning Meets Pseudo-Label Supervised Self-Distillation: A New Approach to Rare Disease Classification},
+  author={Sun, Jinghan and Wei, Dong and Ma, Kai and Wang, Liansheng and Zheng, Yefeng},
+  booktitle={International Conference on Medical Image Computing and Computer-Assisted Intervention},
+  pages={519--529},
+  year={2021},
+  organization={Springer}
+}
 ```
 
 ## Concact
