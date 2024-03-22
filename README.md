@@ -6,6 +6,8 @@ This repo contains the reference source code for the paper [**Unsupervised Repre
 
 This repository was built off of [MoCo: Momentum Contrast for Unsupervised Visual Representation Learning](https://github.com/facebookresearch/moco).
 
+Our extended version of the journal (Medical Image Analysis): Hybrid unsupervised representation learning and pseudo-label supervised self-distillation for rare disease imaging phenotype classification with dispersion-aware imbalance correction, can be found here: [Hbr.Dst.-DIC](1-s2.0-S1361841524000276-main.pdf)
+
 ### Prerequisites
 Install python dependencies.
 ```
