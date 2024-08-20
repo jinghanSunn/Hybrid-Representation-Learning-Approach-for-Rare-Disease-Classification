@@ -3,6 +3,7 @@ from copy import deepcopy
 import torch
 import torch.nn as nn
 
+from model.classifier import Classifier
 
 class MoCo(nn.Module):
     """
@@ -26,29 +27,30 @@ class MoCo(nn.Module):
         # num_classes is the output fc dimension
         print("arch", arch)
         # if arch == '4conv' or arch == 'resnet12' or arch == 'resnet18' or arch == 'resnet24' or arch == 'resnet50' or arch == 'efficient' or arch == 'resnet10': # for learnet
-        if arch == '4conv' or arch == 'resnet12'  or arch == 'efficient' or arch == 'resnet10' or arch == 'resnet50' or arch == 'senet':
+        if arch == '4conv' or arch == 'resnet12'  or arch == 'efficient' or arch == 'resnet10' or arch == 'resnet50':
             self.encoder_q = base_encoder
             self.encoder_k = deepcopy(base_encoder)
         else:
             self.encoder_q = base_encoder(num_classes=dim)
             self.encoder_k = base_encoder(num_classes=dim)
-        
+        self.classifier_q = Classifier(3)
+        self.classifier_k = deepcopy(self.classifier_q)
 
         if mlp:  # hack: brute-force replacement
-            if arch != '4conv':
-                dim_mlp = self.encoder_q.classifier.weight.shape[1]
-                self.encoder_q.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.classifier)
-                self.encoder_k.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.classifier)
-            else:
-                dim_mlp = self.encoder_q.fc.weight.shape[1]
-                self.encoder_q.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.fc)
-                self.encoder_k.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.fc)
+            # dim_mlp = self.encoder_q.classifier.weight.shape[1]
+            # self.encoder_q.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.classifier)
+            # self.encoder_k.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.classifier)
+            dim_mlp = self.encoder_q.fc.weight.shape[1]
+            self.encoder_q.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.fc)
+            self.encoder_k.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.fc)
 
         for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
             # print("before: q:", param_q.requires_grad, "k:", param_k.requires_grad)
             # param_k.data.copy_(param_q.data)  # initialize
             param_k.requires_grad = False  # not update by gradient
             # print("after: q:", param_q.requires_grad, "k:", param_k.requires_grad)
+        for param_q, param_k in zip(self.classifier_q.parameters(), self.classifier_k.parameters()):
+            param_k.requires_grad = False  # not update by gradient
 
         # create the queue
         self.register_buffer("queue", torch.randn(dim, K))
@@ -62,6 +64,8 @@ class MoCo(nn.Module):
         Momentum update of the key encoder
         """
         for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
+            param_k.data = param_k.data * self.m + param_q.data * (1. - self.m)
+        for param_q, param_k in zip(self.classifier_q.parameters(), self.classifier_k.parameters()):
             param_k.data = param_k.data * self.m + param_q.data * (1. - self.m)
 
     @torch.no_grad()
@@ -127,7 +131,7 @@ class MoCo(nn.Module):
 
         return x_gather[idx_this]
 
-    def forward(self, im_q, im_k, return_q=False):
+    def forward(self, im_q, im_k, pred=True, test=False):
         """
         Input:
             im_q: a batch of query images
@@ -140,8 +144,8 @@ class MoCo(nn.Module):
         q = self.encoder_q(im_q)  # queries: NxC
         # q = q.logits # if googlenet
         q = nn.functional.normalize(q, dim=1)
-        if return_q:
-            q_feature = q
+        if test==True:
+            return self.classifier_q(q)
 
         # compute key features
         with torch.no_grad():  # no gradient to keys
@@ -176,8 +180,12 @@ class MoCo(nn.Module):
         # dequeue and enqueue
         self._dequeue_and_enqueue(k)
 
-        if return_q:
-            return logits, labels, q_feature
+        if pred==True:
+            pred_q = self.classifier_q(q)
+            pred_k = self.classifier_k(k)
+
+        if pred ==True:
+            return logits, labels, pred_q, pred_k
         return logits, labels
     
     def get_feature(self, x):

@@ -9,7 +9,6 @@ import shutil
 import time
 import warnings
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -22,20 +21,12 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
-# from efficientnet_pytorch import EfficientNet
 
 import moco.loader
 import moco.builder
 from dataset import ISICDataset
-# from dataset_aptos import ISICDataset
-from dataset_breakHist import BreakHisDataset
-from dataset_papsmear import PAPSmearDataset
-from dataset_oct import OCTDataset
 from model.learner import Learner
-from model.convNet import Convnet
-from model.resnet import resnet12, resnet18, resnet24, resnet50
-from model.se_resnet import se_resnet50
-from utils import plot_acc_loss
+from model.resnet import resnet12
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -46,12 +37,8 @@ parser.add_argument('data', metavar='DIR',
                     help='path to dataset')
 parser.add_argument('--model_path', default='/dockerdata/ISIC/MOCO/moco-master/model/', type=str,
                     help='path to dataset')
-parser.add_argument('--dataset', default='isic', type=str,
-                    choices=['isic', 'breakhis', 'papsmear','oct'])
-parser.add_argument('--visual_dir', default='./ISIC/MOCO/moco-master/log/visual/', type=str,
-                    help='path to visual')
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
-                    # choices=model_names,
+                    choices=model_names,
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet50)')
@@ -108,16 +95,13 @@ parser.add_argument('--moco-t', default=0.07, type=float,
                     help='softmax temperature (default: 0.07)')
 
 # options for moco v2
-parser.add_argument('--mlp', action='store_true', 
+parser.add_argument('--mlp', action='store_true', # store_true就代表着一旦有这个参数，做出动作“将其值标为True”
                     help='use mlp head')
 parser.add_argument('--aug-plus', action='store_true',
                     help='use moco v2 data augmentation')
 parser.add_argument('--cos', action='store_true',
                     help='use cosine lr schedule')
 
-
-parser.add_argument('--train_data', default='all', type=str,
-                    help='normal training (all) / learning without forgetting (part) ')
 
 def main():
     args = parser.parse_args()
@@ -206,7 +190,11 @@ def main_worker(gpu, ngpus_per_node, args):
     #     ('fc', [args.moco_dim, 768]),
     # ]
     config = [
-        ('conv2d', [64, 3, 3, 3, 2, 2]),
+        ('conv2d', [64, 3, 3, 3, 1, 1]),
+        ('relu', [True]),
+        ('bn', [64]),
+        ('max_pool2d', [2, 2, 0]),
+        ('conv2d', [64, 64, 3, 3, 1, 1]),
         ('relu', [True]),
         ('bn', [64]),
         ('max_pool2d', [2, 2, 0]),
@@ -214,59 +202,46 @@ def main_worker(gpu, ngpus_per_node, args):
         ('relu', [True]),
         ('bn', [64]),
         ('max_pool2d', [2, 2, 0]),
-        ('conv2d', [64, 64, 3, 3, 2, 2]),
+        ('conv2d', [64, 64, 3, 3, 1, 1]),
         ('relu', [True]),
         ('bn', [64]),
-        ('max_pool2d', [2, 2, 0]),
-        ('conv2d', [64, 64, 3, 3, 2, 2]),
-        ('relu', [True]),
-        ('bn', [64]),
-        ('max_pool2d', [2, 2, 0]),
+        ('max_pool2d', [1, 2, 0]),
         ('flatten', []),
-        ('fc', [args.moco_dim, 64])
-        # ('fc', [args.moco_dim, 3136]),
+        # ('linear', [args.n_way, 64])
+        # ('fc', [args.moco_dim, 768]),
     ]
     
-    if args.arch == 'resnet12':
-        model = moco.builder.MoCo(
-            resnet12(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=args.moco_dim),
-            args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
-    elif args.arch == 'resnet18':
-        model = moco.builder.MoCo(
-            resnet18(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=args.moco_dim),
-            args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
-    elif args.arch == 'resnet24':
-        model = moco.builder.MoCo(
-            resnet24(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=args.moco_dim),
-            args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
-    elif args.arch == 'resnet50':
-        model = moco.builder.MoCo(
-            resnet50(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=args.moco_dim),
-            args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
-    elif args.arch == 'senet':
-        backbone = se_resnet50(num_classes=args.moco_dim, pretrained=False)
-        model = moco.builder.MoCo(
-            backbone,
-            args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
-    elif args.arch == '4conv':
-        model = moco.builder.MoCo(
-            # Learner(config),
-            Convnet(),
-            args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
-        print(Learner)
-    # elif args.arch == 'efficient':
-    #     encoder = EfficientNet.from_name('efficientnet-b4')
-    #     fea_in = encoder._fc.in_features
-    #     encoder._fc = torch.nn.Linear(fea_in, args.moco_dim)
-    #     print(encoder)
-    #     model = moco.builder.MoCo(
-    #         encoder,
-    #         args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
-    else:
-        model = moco.builder.MoCo(
-            models.__dict__[args.arch],
-            args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
-    # print(model)
+    learner = Learner(config)
+
+     # optionally resume from a umpla
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            if args.gpu is None:
+                checkpoint = torch.load(args.resume)
+            else:
+                # Map model to be loaded to specified single gpu.
+                loc = 'cuda:{}'.format(args.gpu)
+                checkpoint = torch.load(args.resume, map_location=loc)
+            # args.start_epoch = checkpoint['epoch']
+            # learner.load_state_dict(checkpoint)
+            learner.load_state_dict({k.replace('net.',''):v for k,v in checkpoint.items()}, strict=False)
+            # optimizer.load_state_dict(checkpoint['optimizer'])
+            print("=> loaded checkpoint '{}'"
+                  .format(args.resume))
+            learner.add_fc([('fc', [args.moco_dim, 3136])])
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
+
+    model = moco.builder.MoCo(
+        # models.__dict__[args.arch],
+        # Learner(config),
+        learner,
+        # resnet12(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=args.moco_dim),
+        args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp)
+    print(model)
+
+
 
     # for param in model.parameters():#nn.Module有成员函数parameters()
     #     print(param.requires_grad)
@@ -306,31 +281,14 @@ def main_worker(gpu, ngpus_per_node, args):
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
 
-    # optionally resume from a checkpoint
-    if args.resume:
-        if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
-            if args.gpu is None:
-                checkpoint = torch.load(args.resume)
-            else:
-                # Map model to be loaded to specified single gpu.
-                loc = 'cuda:{}'.format(args.gpu)
-                checkpoint = torch.load(args.resume, map_location=loc)
-            args.start_epoch = checkpoint['epoch']
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
-        else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
+   
 
     cudnn.benchmark = True
 
     # Data loading code
     traindir = args.data
-    
-    if args.dataset == 'isic':
-        train_dataset = ISICDataset(root=traindir)
+  
+    train_dataset = ISICDataset(root=traindir)
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -341,18 +299,14 @@ def main_worker(gpu, ngpus_per_node, args):
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
 
-    center = 0
-    queue=None
     for epoch in range(args.start_epoch, args.epochs):
-        print("epoch", epoch)
         if args.distributed:
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        loss, center, queue = train(train_loader, model, criterion, optimizer, epoch, args, center, queue)
+        train(train_loader, model, criterion, optimizer, epoch, args)
 
-        
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
             save_checkpoint({
@@ -360,48 +314,41 @@ def main_worker(gpu, ngpus_per_node, args):
                 'arch': args.arch,
                 'state_dict': model.state_dict(),
                 'optimizer' : optimizer.state_dict(),
-                'center': center,
             }, is_best=False, filename=args.model_path + 'checkpoint_{:04d}.pth.tar'.format(epoch))
 
 
-def train(train_loader, model, criterion, optimizer, epoch, args, center=None, queue=None):
+def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    losses_part = AverageMeter('Loss_part', ':.4e')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses_part, losses, top1, top5],
+        [batch_time, data_time, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
     model.train()
 
     end = time.time()
-    all_loss = []
     for i, (images) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
+        # print(images[0].shape)
 
         if args.gpu is not None:
             images[0] = images[0].cuda(args.gpu, non_blocking=True)
             images[1] = images[1].cuda(args.gpu, non_blocking=True)
 
+        # compute output
         output, target = model(im_q=images[0], im_k=images[1])
-
-
         loss = criterion(output, target)
-
 
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
         # measure accuracy and record loss
-        all_loss.append(loss.item())
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), images[0].size(0))
-        # if epoch >= thre:
-        #     losses_part.update(loss_part.item(), images[0].size(0))
         top1.update(acc1[0], images[0].size(0))
         top5.update(acc5[0], images[0].size(0))
 
@@ -414,24 +361,15 @@ def train(train_loader, model, criterion, optimizer, epoch, args, center=None, q
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % 200 == 0:
+        if i % args.print_freq == 0:
             progress.display(i)
-    return np.mean(all_loss), center, queue
+
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
     if is_best:
         shutil.copyfile(filename, 'model_best.pth.tar')
 
-def dequeue_and_enqueue(queue, new_feature, new):
-    if new:
-        queue = new_feature
-    elif queue.shape[0] < 2560:
-        queue = torch.cat([queue, new_feature])
-    else:
-        queue = torch.cat([queue, new_feature])
-        queue = queue[new_feature.shape[0]:, :]
-    return queue
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -494,12 +432,11 @@ def accuracy(output, target, topk=(1,)):
 
         _, pred = output.topk(maxk, 1, True, True)
         pred = pred.t()
-        correct = pred.eq(target.contiguous().view(1, -1).expand_as(pred))
-        # print(correct.shape)
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
 
         res = []
         for k in topk:
-            correct_k = correct[:k].contiguous().view(-1).float().sum(0, keepdim=True)
+            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 

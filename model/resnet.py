@@ -223,7 +223,6 @@ class ResNet(nn.Module):
         feat = x
         if self.num_classes > 0:
             x = self.classifier(x)
-        
 
         if is_feat:
             return [f0, f1, f2, f3, feat], x

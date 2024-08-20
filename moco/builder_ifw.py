@@ -21,12 +21,12 @@ class MoCo(nn.Module):
         self.K = K
         self.m = m
         self.T = T
-
+        self.epsilon = 0.1
         # create the encoders
         # num_classes is the output fc dimension
         print("arch", arch)
         # if arch == '4conv' or arch == 'resnet12' or arch == 'resnet18' or arch == 'resnet24' or arch == 'resnet50' or arch == 'efficient' or arch == 'resnet10': # for learnet
-        if arch == '4conv' or arch == 'resnet12'  or arch == 'efficient' or arch == 'resnet10' or arch == 'resnet50' or arch == 'senet':
+        if arch == '4conv' or arch == 'resnet12'  or arch == 'efficient' or arch == 'resnet10' or arch == 'resnet50':
             self.encoder_q = base_encoder
             self.encoder_k = deepcopy(base_encoder)
         else:
@@ -35,14 +35,12 @@ class MoCo(nn.Module):
         
 
         if mlp:  # hack: brute-force replacement
-            if arch != '4conv':
-                dim_mlp = self.encoder_q.classifier.weight.shape[1]
-                self.encoder_q.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.classifier)
-                self.encoder_k.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.classifier)
-            else:
-                dim_mlp = self.encoder_q.fc.weight.shape[1]
-                self.encoder_q.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.fc)
-                self.encoder_k.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.fc)
+            # dim_mlp = self.encoder_q.classifier.weight.shape[1]
+            # self.encoder_q.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.classifier)
+            # self.encoder_k.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.classifier)
+            dim_mlp = self.encoder_q.fc.weight.shape[1]
+            self.encoder_q.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.fc)
+            self.encoder_k.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.fc)
 
         for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
             # print("before: q:", param_q.requires_grad, "k:", param_k.requires_grad)
@@ -166,9 +164,11 @@ class MoCo(nn.Module):
 
         # logits: Nx(1+K)
         logits = torch.cat([l_pos, l_neg], dim=1) # 第一维是和正样本的相似度，后面K维是和负样本的相似度。所以每个batch里的样本的label都是0，也就是类别分的是第一个
-
+        logits_adv = torch.cat([l_pos - self.epsilon, l_neg + self.epsilon], dim=1)
+        
         # apply temperature
         logits /= self.T
+        logits_adv /= self.T
 
         # labels: positive key indicators
         labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
@@ -178,7 +178,7 @@ class MoCo(nn.Module):
 
         if return_q:
             return logits, labels, q_feature
-        return logits, labels
+        return logits, logits_adv, labels
     
     def get_feature(self, x):
         feature = self.encoder_q(x)

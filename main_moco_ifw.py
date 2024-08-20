@@ -25,16 +25,12 @@ import torchvision.models as models
 # from efficientnet_pytorch import EfficientNet
 
 import moco.loader
-import moco.builder
-from dataset import ISICDataset
+import moco.builder_ifw
+from dataset import ISICDataset, ISICDatasetPart
 # from dataset_aptos import ISICDataset
-from dataset_breakHist import BreakHisDataset
-from dataset_papsmear import PAPSmearDataset
-from dataset_oct import OCTDataset
 from model.learner import Learner
 from model.convNet import Convnet
 from model.resnet import resnet12, resnet18, resnet24, resnet50
-from model.se_resnet import se_resnet50
 from utils import plot_acc_loss
 
 model_names = sorted(name for name in models.__dict__
@@ -46,8 +42,6 @@ parser.add_argument('data', metavar='DIR',
                     help='path to dataset')
 parser.add_argument('--model_path', default='/dockerdata/ISIC/MOCO/moco-master/model/', type=str,
                     help='path to dataset')
-parser.add_argument('--dataset', default='isic', type=str,
-                    choices=['isic', 'breakhis', 'papsmear','oct'])
 parser.add_argument('--visual_dir', default='./ISIC/MOCO/moco-master/log/visual/', type=str,
                     help='path to visual')
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
@@ -181,30 +175,7 @@ def main_worker(gpu, ngpus_per_node, args):
                                 world_size=args.world_size, rank=args.rank)
     # create model
     print("=> creating model '{}'".format(args.arch))
-    # model = moco.builder.MoCo(
-        # models.__dict__[args.arch],
-        # args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp)
-    # config = [
-    #     ('conv2d', [64, 3, 3, 3, 1, 1]),
-    #     ('relu', [True]),
-    #     ('bn', [64]),
-    #     ('max_pool2d', [2, 2, 0]),
-    #     ('conv2d', [64, 64, 3, 3, 1, 1]),
-    #     ('relu', [True]),
-    #     ('bn', [64]),
-    #     ('max_pool2d', [2, 2, 0]),
-    #     ('conv2d', [64, 64, 3, 3, 1, 1]),
-    #     ('relu', [True]),
-    #     ('bn', [64]),
-    #     ('max_pool2d', [2, 2, 0]),
-    #     ('conv2d', [64, 64, 3, 3, 1, 1]),
-    #     ('relu', [True]),
-    #     ('bn', [64]),
-    #     ('max_pool2d', [2, 2, 0]),
-    #     ('flatten', []),
-    #     # ('linear', [args.n_way, 64])
-    #     ('fc', [args.moco_dim, 768]),
-    # ]
+
     config = [
         ('conv2d', [64, 3, 3, 3, 2, 2]),
         ('relu', [True]),
@@ -228,28 +199,23 @@ def main_worker(gpu, ngpus_per_node, args):
     ]
     
     if args.arch == 'resnet12':
-        model = moco.builder.MoCo(
+        model = moco.builder_ifw.MoCo(
             resnet12(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=args.moco_dim),
             args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
     elif args.arch == 'resnet18':
-        model = moco.builder.MoCo(
+        model = moco.builder_ifw.MoCo(
             resnet18(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=args.moco_dim),
             args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
     elif args.arch == 'resnet24':
-        model = moco.builder.MoCo(
+        model = moco.builder_ifw.MoCo(
             resnet24(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=args.moco_dim),
             args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
     elif args.arch == 'resnet50':
-        model = moco.builder.MoCo(
+        model = moco.builder_ifw.MoCo(
             resnet50(avg_pool=True, drop_rate=0.1, dropblock_size=5, num_classes=args.moco_dim),
             args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
-    elif args.arch == 'senet':
-        backbone = se_resnet50(num_classes=args.moco_dim, pretrained=False)
-        model = moco.builder.MoCo(
-            backbone,
-            args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
     elif args.arch == '4conv':
-        model = moco.builder.MoCo(
+        model = moco.builder_ifw.MoCo(
             # Learner(config),
             Convnet(),
             args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
@@ -259,11 +225,11 @@ def main_worker(gpu, ngpus_per_node, args):
     #     fea_in = encoder._fc.in_features
     #     encoder._fc = torch.nn.Linear(fea_in, args.moco_dim)
     #     print(encoder)
-    #     model = moco.builder.MoCo(
+    #     model = moco.builder_ifw.MoCo(
     #         encoder,
     #         args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
     else:
-        model = moco.builder.MoCo(
+        model = moco.builder_ifw.MoCo(
             models.__dict__[args.arch],
             args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
     # print(model)
@@ -328,9 +294,11 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # Data loading code
     traindir = args.data
-    
-    if args.dataset == 'isic':
+    if args.train_data == 'all':
         train_dataset = ISICDataset(root=traindir)
+    else:
+        train_dataset = ISICDatasetPart(root=traindir)
+    
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -341,10 +309,10 @@ def main_worker(gpu, ngpus_per_node, args):
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
 
+    all_loss = []
     center = 0
     queue=None
     for epoch in range(args.start_epoch, args.epochs):
-        print("epoch", epoch)
         if args.distributed:
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, epoch, args)
@@ -352,6 +320,13 @@ def main_worker(gpu, ngpus_per_node, args):
         # train for one epoch
         loss, center, queue = train(train_loader, model, criterion, optimizer, epoch, args, center, queue)
 
+        # record loss and plot fig
+        all_loss.append(loss)
+        save_name = args.model_path.split('/')[-2]
+        x = np.arange(0, len(all_loss), 1)
+        plot_acc_loss(x, all_loss, path=args.visual_dir, name=f"({save_name}) loss", save_name=f'{save_name}_loss')
+        np.save(os.path.join(args.visual_dir, save_name+'_loss.npy'), np.array(all_loss))
+        print("save loss npy to", os.path.join(args.visual_dir, save_name+'_loss.npy'))
         
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
@@ -384,15 +359,19 @@ def train(train_loader, model, criterion, optimizer, epoch, args, center=None, q
     for i, (images) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
+        # print(images[0].shape)
 
         if args.gpu is not None:
             images[0] = images[0].cuda(args.gpu, non_blocking=True)
             images[1] = images[1].cuda(args.gpu, non_blocking=True)
 
-        output, target = model(im_q=images[0], im_k=images[1])
-
-
-        loss = criterion(output, target)
+        # compute output
+        thre = 50
+        output, output_adv, target = model(im_q=images[0], im_k=images[1])
+        loss_orig = criterion(output, target)
+        loss_adv = criterion(output_adv, target)
+        loss = loss_orig + 1 * loss_adv
+        loss /= (1+1)
 
 
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
@@ -414,7 +393,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, center=None, q
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % 200 == 0:
+        if i % args.print_freq == 0:
             progress.display(i)
     return np.mean(all_loss), center, queue
 
@@ -494,12 +473,12 @@ def accuracy(output, target, topk=(1,)):
 
         _, pred = output.topk(maxk, 1, True, True)
         pred = pred.t()
-        correct = pred.eq(target.contiguous().view(1, -1).expand_as(pred))
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
         # print(correct.shape)
 
         res = []
         for k in topk:
-            correct_k = correct[:k].contiguous().view(-1).float().sum(0, keepdim=True)
+            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 

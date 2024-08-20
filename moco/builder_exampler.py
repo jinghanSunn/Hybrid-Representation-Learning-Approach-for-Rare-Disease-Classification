@@ -26,7 +26,7 @@ class MoCo(nn.Module):
         # num_classes is the output fc dimension
         print("arch", arch)
         # if arch == '4conv' or arch == 'resnet12' or arch == 'resnet18' or arch == 'resnet24' or arch == 'resnet50' or arch == 'efficient' or arch == 'resnet10': # for learnet
-        if arch == '4conv' or arch == 'resnet12'  or arch == 'efficient' or arch == 'resnet10' or arch == 'resnet50' or arch == 'senet':
+        if arch == '4conv' or arch == 'resnet12'  or arch == 'efficient' or arch == 'resnet10' or arch == 'resnet50':
             self.encoder_q = base_encoder
             self.encoder_k = deepcopy(base_encoder)
         else:
@@ -35,14 +35,12 @@ class MoCo(nn.Module):
         
 
         if mlp:  # hack: brute-force replacement
-            if arch != '4conv':
-                dim_mlp = self.encoder_q.classifier.weight.shape[1]
-                self.encoder_q.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.classifier)
-                self.encoder_k.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.classifier)
-            else:
-                dim_mlp = self.encoder_q.fc.weight.shape[1]
-                self.encoder_q.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.fc)
-                self.encoder_k.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.fc)
+            # dim_mlp = self.encoder_q.classifier.weight.shape[1]
+            # self.encoder_q.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.classifier)
+            # self.encoder_k.classifier = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.classifier)
+            dim_mlp = self.encoder_q.fc.weight.shape[1]
+            self.encoder_q.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.fc)
+            self.encoder_k.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.fc)
 
         for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
             # print("before: q:", param_q.requires_grad, "k:", param_k.requires_grad)
@@ -53,6 +51,8 @@ class MoCo(nn.Module):
         # create the queue
         self.register_buffer("queue", torch.randn(dim, K))
         self.queue = nn.functional.normalize(self.queue, dim=0)
+
+        self.register_buffer('queue_label', torch.full((1, K), (-1)))
 
         self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
@@ -65,9 +65,10 @@ class MoCo(nn.Module):
             param_k.data = param_k.data * self.m + param_q.data * (1. - self.m)
 
     @torch.no_grad()
-    def _dequeue_and_enqueue(self, keys):
+    def _dequeue_and_enqueue(self, keys, gts):
         # gather keys before updating queue
         keys = concat_all_gather(keys)
+        gts = concat_all_gather(gts)
 
         batch_size = keys.shape[0]
 
@@ -76,6 +77,7 @@ class MoCo(nn.Module):
 
         # replace the keys at ptr (dequeue and enqueue)
         self.queue[:, ptr:ptr + batch_size] = keys.T
+        self.queue_label[:, ptr:ptr + batch_size] = gts.T
         ptr = (ptr + batch_size) % self.K  # move pointer
 
         self.queue_ptr[0] = ptr
@@ -127,7 +129,7 @@ class MoCo(nn.Module):
 
         return x_gather[idx_this]
 
-    def forward(self, im_q, im_k, return_q=False):
+    def forward(self, im_q, im_k, gt, return_q=False):
         """
         Input:
             im_q: a batch of query images
@@ -163,6 +165,10 @@ class MoCo(nn.Module):
         l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)
         # negative logits: NxK
         l_neg = torch.einsum('nc,ck->nk', [q, self.queue.clone().detach()])
+        for i in range(len(l_neg)):
+            # print((self.queue_label.squeeze()==gt[i]).squeeze().sum()) 
+            l_neg[i][(self.queue_label.squeeze()==gt[i]).squeeze()] = 0
+            # print(l_neg[i])
 
         # logits: Nx(1+K)
         logits = torch.cat([l_pos, l_neg], dim=1) # 第一维是和正样本的相似度，后面K维是和负样本的相似度。所以每个batch里的样本的label都是0，也就是类别分的是第一个
@@ -174,7 +180,7 @@ class MoCo(nn.Module):
         labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
 
         # dequeue and enqueue
-        self._dequeue_and_enqueue(k)
+        self._dequeue_and_enqueue(k, gt)
 
         if return_q:
             return logits, labels, q_feature
