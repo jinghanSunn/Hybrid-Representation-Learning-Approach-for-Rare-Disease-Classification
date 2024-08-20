@@ -74,22 +74,7 @@ class RIDELoss(nn.Module):
     def __init__(self, cls_num_list=None, base_diversity_temperature=1.0, max_m=0.5, s=30, reweight=True, reweight_epoch=-1, 
         base_loss_factor=1.0, additional_diversity_factor=1, reweight_factor=0.1):
         super().__init__()
-        # self.base_loss = F.cross_entropy
-        # self.base_loss_factor = base_loss_factor
-        # if not reweight:
-        #     self.reweight_epoch = -1
-        # else:
-        #     self.reweight_epoch = reweight_epoch
 
-        # LDAM is a variant of cross entropy and we handle it with self.m_list.
-        # if cls_num_list is None:
-        #     # No cls_num_list is provided, then we cannot adjust cross entropy with LDAM.
-
-        #     self.m_list = None
-        #     self.per_cls_weights_enabled = None
-        #     self.per_cls_weights_enabled_diversity = None
-        # else:
-            # We will use LDAM loss if we provide cls_num_list.
 
         m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
         m_list = m_list * (max_m / np.max(m_list))
@@ -138,17 +123,6 @@ class RIDELoss(nn.Module):
 
         return self
 
-    # def _hook_before_epoch(self, epoch):
-    #     if self.reweight_epoch != -1:
-    #         self.epoch = epoch
-
-    #         if epoch > self.reweight_epoch:
-    #             self.per_cls_weights_base = self.per_cls_weights_enabled
-    #             self.per_cls_weights_diversity = self.per_cls_weights_enabled_diversity
-    #         else:
-    #             self.per_cls_weights_base = None
-    #             self.per_cls_weights_diversity = None
-
     def get_final_output(self, output_logits, target):
         x = output_logits
 
@@ -170,14 +144,9 @@ class RIDELoss(nn.Module):
 
         # if self.per_cls_weights_diversity is not None:
         diversity_temperature = 1 * self.per_cls_weights_diversity.view((1, -1))
-        # print(diversity_temperature) 
-        # 1shot: [1, 0.9840, 0.9997]  
-        # 3shot: [1, 0.9891, 0.9854]  
-        # 5shot: [0.9783, 1, 0.9578]  
+
         temperature_mean = diversity_temperature.mean().item()
-        # else:
-        #     diversity_temperature = 1
-        #     temperature_mean = 1
+
         
         output_dist = F.log_softmax(output_logits / diversity_temperature, dim=1)
         with torch.no_grad():

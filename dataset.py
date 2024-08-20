@@ -294,11 +294,7 @@ class ISICPretrainDatasetfoTrain(Dataset):
 
         self.transform_spt = transforms.Compose([   
                                                 transforms.Resize((224, 224)),
-                                                # transforms.RandomResizedCrop((224, 224), scale=(0.2, 1.)),
-                                                # # transforms.RandomGrayscale(p=0.2),
-                                                # transforms.RandomApply([moco.loader.GaussianBlur([.1, 2.])], p=0.5),
-                                                # transforms.RandomVerticalFlip(),
-                                                # transforms.RandomHorizontalFlip(),
+                                            
                                                 transforms.ToTensor(),
                                                  ])
         self.transform_qry = transforms.Compose([
@@ -351,13 +347,6 @@ class ISICPretrainDataset(Dataset):
     
 
         self.transform_spt = transforms.Compose([   
-                                                # transforms.Resize((224, 224)),
-                                                # transforms.RandomResizedCrop((224, 224), scale=(0.2, 1.)),
-                                                # # transforms.RandomGrayscale(p=0.2),
-                                                # transforms.RandomApply([moco.loader.GaussianBlur([.1, 2.])], p=0.5),
-                                                # transforms.RandomVerticalFlip(),
-                                                # transforms.RandomHorizontalFlip(),
-                                                # transforms.ToTensor(),
                                                 transforms.Resize((224, 224)),
                                                 transforms.RandomResizedCrop((224, 224), scale=(0.2, 1.)),
                                                 transforms.RandomApply([
@@ -556,11 +545,7 @@ class ISICTestDataset(Dataset):
                     perm = np.random.permutation(self.n_way * self.k_shot)
                     x_spt = np.array(x_spt).reshape(self.n_way * self.k_shot)[perm]
                     y_spt = np.array(y_spt).reshape(self.n_way * self.k_shot)[perm]
-                    # y_spt = np.eye(n_way)[y_spt]
-
-                    # perm = np.random.permutation(self.n_way * self.k_query)
-                    # x_qry = np.array(x_qry).reshape(self.n_way * self.k_query)[perm]
-                    # y_qry = np.array(y_qry).reshape(self.n_way * self.k_query)[perm]
+               
                     perm = np.random.permutation(self.query_num)
                     x_qry = np.array(x_qry).reshape(self.query_num)[perm]
                     y_qry = np.array(y_qry).reshape(self.query_num)[perm]
@@ -575,9 +560,7 @@ class ISICTestDataset(Dataset):
                     x_spt, y_spt, x_qry, y_qry = [], [], [], []
                     for j, cur_class in enumerate(selected_cls):
                         selected_img = np.random.choice(class_len[cur_class], self.k_shot + self.k_query, False)
-                        # print(self.x_data[cur_class][:10])
-                        # print(self.x_data[cur_class][selected_img[:self.k_shot]])
-
+                       
                         # meta-training and meta-test
                         x_spt.append(self.x_data[cur_class][selected_img[:self.k_shot]])
                         x_qry.append(self.x_data[cur_class][selected_img[self.k_shot:]])
@@ -749,15 +732,8 @@ class ISICTestODataset(Dataset):
         
         for i in range(len(x_spt)):
             x_spt_img[i] = self.transform(openImage(x_spt[i], self.path)).float()
-
-
-        # for i in range(len(x_qry)):
-        #     x_qry_img[i] = self.transform(openImage(x_qry[i], self.path)).float()
         
         x_spt_img = x_spt_img.reshape(self.n_way * self.k_shot, 3, 224, 224)
-        # x_qry_img = x_qry_img.reshape(self.n_way * self.k_query, 3, 224, 224)
-        # x_qry_img = x_qry_img.reshape(self.query_num, 3, 224, 224)
-        # print(x_spt_img.shape)
         x_qry_img = self.transform(openImage(self.x[idx], self.path)).float()
         y_qry = self.label[idx]
         return x_spt_img, y_spt, x_qry_img, y_qry
