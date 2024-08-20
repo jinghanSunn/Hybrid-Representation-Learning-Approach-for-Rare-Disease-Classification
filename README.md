@@ -1,7 +1,7 @@
 # Hybrid unsupervised representation learning and pseudo-label supervised self-distillation for rare disease imaging phenotype classification with dispersion-aware imbalance correction
 This repo contains the reference source code for the paper [**Hybrid unsupervised representation learning and pseudo-label supervised self-distillation for rare disease imaging phenotype classification with dispersion-aware imbalance correction**](https://www.sciencedirect.com/science/article/abs/pii/S1361841524000276) in Medical Image Analysis. In this project, we provide a hybrid representation learning approach for rare disease classification. Our implementation is based on [Pytorch](https://pytorch.org/).
 <div align="center">
-	<img src="./Procedure" alt="Editor" width="600">
+	<img src="./Procedure.png" alt="Editor" width="600">
 </div>
 
 
