@@ -149,27 +149,7 @@ def main():
 
 def main_worker(args):
 
-    # config = [
-    #     ('conv2d', [64, 3, 3, 3, 1, 1]),
-    #     ('relu', [True]),
-    #     ('bn', [64]),
-    #     ('max_pool2d', [2, 2, 0]),
-    #     ('conv2d', [64, 64, 3, 3, 1, 1]),
-    #     ('relu', [True]),
-    #     ('bn', [64]),
-    #     ('max_pool2d', [2, 2, 0]),
-    #     ('conv2d', [64, 64, 3, 3, 2, 2]),
-    #     ('relu', [True]),
-    #     ('bn', [64]),
-    #     ('max_pool2d', [2, 2, 0]),
-    #     ('conv2d', [64, 64, 3, 3, 1, 1]),
-    #     ('relu', [True]),
-    #     ('bn', [64]),
-    #     ('max_pool2d', [1, 2, 0]),
-    #     ('flatten', []),
-    #     # ('linear', [args.n_way, 64])
-    #     ('fc', [args.moco_dim, 768]),
-    # ]
+
     config = [
         ('conv2d', [64, 3, 3, 3, 2, 2]),
         ('relu', [True]),
@@ -208,14 +188,6 @@ def main_worker(args):
                 Learner(config),
                 # Convnet(),
                 args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch).cuda()
-        # elif args.arch == 'efficient':
-        #     encoder = EfficientNet.from_name('efficientnet-b4')
-        #     fea_in = encoder._fc.in_features
-        #     encoder._fc = torch.nn.Linear(fea_in, args.moco_dim)
-        #     print(encoder)
-        #     model = moco.builder.MoCo(
-        #         encoder,
-        #         args.moco_dim, args.moco_k, args.moco_m, args.moco_t, args.mlp, arch=args.arch)
         elif args.arch == 'senet':
             backbone = se_resnet50(num_classes=args.moco_dim, pretrained=False)
             model = moco.builder.MoCo(
@@ -326,14 +298,6 @@ def main_worker(args):
         elif args.pretrain == 'none':
             extractor = model.encoder_q
             Classifi = Classify
-
-        # corrects = 0
-        # AUC = 0
-        # pred_all = []
-        # true = []
-        # flag = 0
-
-        # Classifi = deepcopy(Classify)
         corrects = []
         AUC_macro = []
         AUC_micro = []
@@ -360,7 +324,6 @@ def main_worker(args):
                     # # deepcopy model for each task
                     extractor = deepcopy(model.encoder_q)
                     Classifi = deepcopy(Classify)
-                    # optimizer = torch.optim.SGD(params=chain(extractor.parameters(), Classifi.parameters()), lr=args.lr,) # finetune all model
                     optimizer = torch.optim.SGD(Classifi.parameters(), lr=args.lr,) # only finetune classifier
 
 
@@ -378,29 +341,13 @@ def main_worker(args):
                         loss.backward()
                         optimizer.step()
 
-                        # test
-                        # if i % 1==0:
-                        #     # print(i,"loss:",loss)
-                        #     with torch.no_grad():
-                        #         y_qry_pred = Classifi(extractor(x_qry.squeeze()))
-                        #         logits_q_sm = F.softmax(y_qry_pred, dim=1)
-                        #         correct = (torch.eq(logits_q_sm.argmax(dim=1), y_qry.squeeze()).sum().item())/y_qry_pred.shape[0]
-                        #         print(i+1, "acc:", correct)
 
-                # with torch.no_grad():
-                #     y_qry_pred = Classify(model.encoder_q(x_qry.squeeze()))
-                #     logits_q_sm = F.softmax(y_qry_pred, dim=1)
-                #     correct = (torch.eq(logits_q_sm.argmax(dim=1), y_qry.squeeze()).sum().item())/y_qry_pred.shape[0]
-                #     print("acc:", correct)
-                #     corrects += correct
                 with torch.no_grad():
                     y_qry_pred = Classifi(extractor(x_qry.squeeze()))
                     logits_q_sm = F.softmax(y_qry_pred, dim=1)
                     correct = (torch.eq(logits_q_sm.argmax(dim=1), y_qry.squeeze()).sum().item())/y_qry_pred.shape[0]
-                    # print("acc:", correct)
-                    # corrects += correct
+   
                 corrects.append(correct) 
-                # print(roc_auc_score(np.eye(2)[y_qry.squeeze().cpu().numpy()], prob_q))
                 AUC_sample.append(roc_auc_score(np.eye(args.n_way)[y_qry.squeeze().cpu().numpy()], logits_q_sm.cpu(), average='samples'))
                 AUC_micro.append(roc_auc_score(np.eye(args.n_way)[y_qry.squeeze().cpu().numpy()], logits_q_sm.cpu(), average='micro'))
                 AUC_macro.append(roc_auc_score(np.eye(args.n_way)[y_qry.squeeze().cpu().numpy()], logits_q_sm.cpu(), average='macro'))  # samples<micro<macro=weight
@@ -450,44 +397,18 @@ def main_worker(args):
                     y_qry_pred = Classifi(extractor(x_qry))
                     logits_q_sm = F.softmax(y_qry_pred, dim=1)
                     pred = logits_q_sm.argmax(dim=1)
-                    # if pred.cpu().detach().numpy()!=y_qry.cpu().detach().numpy():
-                    #     print(j, "pred:", pred.cpu().detach().numpy(), 'gt:', y_qry.cpu().detach().numpy())
-                    # print("acc:", correct)
                     pred_all.extend(pred.cpu().detach().numpy())
                     prob_all.extend(logits_q_sm.cpu().detach().numpy())
                     true.extend(y_qry.cpu().detach().numpy())
-                        # print(pred, true)
-            # print(pred_all)
-            # # prob_all = np.array(prob_all)
-            # # print(prob_all.shape)
-            # print(true)
-            # print(torch.eq(torch.Tensor(pred_all), torch.Tensor(true)))
-            # print(torch.eq(torch.Tensor(pred_all), torch.Tensor(true)).sum().item())
-            # print("base acc:", (torch.eq(torch.Tensor(pred_all[-200:]), torch.Tensor(true[-200:])).sum().item())/200)
+
             corrects = (torch.eq(torch.Tensor(pred_all), torch.Tensor(true)).sum().item())/len(test_loader)
-            # print(torch.eq(torch.Tensor(pred_all), torch.Tensor(true)))
-            # print((torch.eq(torch.Tensor(pred_all), torch.Tensor(true)).sum().item()))
-            # print(len(test_loader))
-            # AUC_sample = roc_auc_score(np.eye(args.n_way)[true], prob_all, average='samples')
-            # AUC_micro = roc_auc_score(np.eye(args.n_way)[true], prob_all, average='micro')
-            # AUC_macro.append(roc_auc_score(np.eye(args.n_way)[true], prob_all, average='macro'))
             PREICISION, RECALL, F1, _ = precision_recall_fscore_support(np.eye(args.n_way)[true], np.eye(args.n_way)[pred_all])
             JACCARD_sample = jaccard_score(np.eye(args.n_way)[true], np.eye(args.n_way)[pred_all], average='samples')
             JACCARD_micro = jaccard_score(np.eye(args.n_way)[true], np.eye(args.n_way)[pred_all], average='micro')
             JACCARD_macro = jaccard_score(np.eye(args.n_way)[true], np.eye(args.n_way)[pred_all], average='macro')
             KAPPA = cohen_kappa_score(true, pred_all)
-            # reliability_data = [np.eye(args.n_way)[pred_all],np.eye(args.n_way)[true]]
-            # kappa = krippendorff.alpha(reliability_data=reliability_data)
-            # for i in np.unique(true):
-                # print(i)
-                # print(torch.sum((torch.Tensor(pred_all)==i)))
-                # print(torch.sum(torch.Tensor(true)==i))
-                # print(torch.sum((torch.Tensor(pred_all)==i))/torch.sum(torch.Tensor(true)==i))
-            #[110, 322, 137]
+
             if args.dataset == 'isic':
-                # index1 = 115 - args.k_shot
-                # index2 = 327 - args.k_shot
-                # index3 = 142 - args.k_shot
                 index1 = 228 - args.k_shot
                 index2 = 97 - args.k_shot
                 index3 = 74 - args.k_shot
@@ -507,9 +428,6 @@ def main_worker(args):
 
 
             print("accuracy:", corrects)
-            # print("AUC_sample:", np.mean(AUC_sample))
-            # print("AUC_micro:", np.mean(AUC_micro))
-            # print("AUC_macro:", np.mean(AUC_macro))
             print("precision:", np.mean(PREICISION))
             print("recall:", np.mean(RECALL))
             print("fscore:", np.mean(F1))
